@@ -1,0 +1,171 @@
+#include <3ds.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+// Scherminstellingen
+#define SCREEN_WIDTH 240
+#define SCREEN_HEIGHT 160
+
+// Snake instellingen
+#define INITIAL_SNAKE_LENGTH 5
+#define MAX_SNAKE_LENGTH (SCREEN_WIDTH * SCREEN_HEIGHT)
+
+// Richtingen
+typedef enum {UP, DOWN, LEFT, RIGHT} Direction;
+
+// Snake data
+typedef struct {
+    int x[MAX_SNAKE_LENGTH];
+    int y[MAX_SNAKE_LENGTH];
+    int length;
+    Direction dir;
+} Snake;
+
+// Fruit data
+typedef struct {
+    int x;
+    int y;
+} Fruit;
+
+// Score
+int score = 0;
+int speed = 300000; // snelheid in microseconden (aangepast in instellingen)
+
+// Functies
+void initGame(Snake* snake, Fruit* fruit);
+void drawSnake(Snake* snake);
+void drawFruit(Fruit* fruit);
+void moveSnake(Snake* snake);
+int checkCollision(Snake* snake);
+void placeFruit(Fruit* fruit);
+void updateSettings();
+
+// Loggen van acties
+void logAction(const char* action) {
+    printf("Log: %s\n", action);
+}
+
+// Hoofdgame-loop
+int main() {
+    // 3DS initialisatie
+    gfxInitDefault();
+    consoleInit(GFX_TOP, NULL);
+
+    // Game data initialiseren
+    Snake snake;
+    Fruit fruit;
+    initGame(&snake, &fruit);
+
+    logAction("Game gestart");
+
+    // Game loop
+    while (aptMainLoop()) {
+        // Invoer
+        hidScanInput();
+        u32 keys = hidKeysDown();
+        
+        if (keys & KEY_START) {
+            logAction("Game gepauzeerd");
+            break;
+        }
+
+        if (keys & KEY_UP && snake.dir != DOWN) snake.dir = UP;
+        if (keys & KEY_DOWN && snake.dir != UP) snake.dir = DOWN;
+        if (keys & KEY_LEFT && snake.dir != RIGHT) snake.dir = LEFT;
+        if (keys & KEY_RIGHT && snake.dir != LEFT) snake.dir = RIGHT;
+
+        // Beweeg de slang
+        moveSnake(&snake);
+
+        // Controleer of de slang zichzelf heeft gebeten of de rand heeft geraakt
+        if (checkCollision(&snake)) {
+            logAction("Game over");
+            break;
+        }
+
+        // Als de slang het fruit eet, score verhogen en fruit opnieuw plaatsen
+        if (snake.x[0] == fruit.x && snake.y[0] == fruit.y) {
+            score++;
+            placeFruit(&fruit);
+            if (score % 5 == 0) {
+                speed -= 50000; // versnelt de slang elke 5 punten
+                logAction("Snelheid verhoogd");
+            }
+        }
+
+        // Teken alles
+        drawSnake(&snake);
+        drawFruit(&fruit);
+
+        // Game vertraging
+        svcSleepThread(speed);
+    }
+
+    // Afsluiten
+    logAction("Game afgesloten");
+    gfxExit();
+    return 0;
+}
+
+// Functies voor het initialiseren van de game, tekenen, etc.
+void initGame(Snake* snake, Fruit* fruit) {
+    snake->length = INITIAL_SNAKE_LENGTH;
+    snake->dir = RIGHT;
+    for (int i = 0; i < snake->length; i++) {
+        snake->x[i] = 10 - i;
+        snake->y[i] = 10;
+    }
+    placeFruit(fruit);
+    score = 0;
+    updateSettings();
+}
+
+void drawSnake(Snake* snake) {
+    for (int i = 0; i < snake->length; i++) {
+        consoleDrawRect(snake->x[i] * 8, snake->y[i] * 8, 8, 8, i == 0 ? 0x00FF00 : 0xFFFFFF); // hoofd groen, rest wit
+    }
+}
+
+void drawFruit(Fruit* fruit) {
+    consoleDrawRect(fruit->x * 8, fruit->y * 8, 8, 8, 0xFF0000); // Fruit is rood
+}
+
+void moveSnake(Snake* snake) {
+    // Verplaats de slang naar voren
+    for (int i = snake->length - 1; i > 0; i--) {
+        snake->x[i] = snake->x[i-1];
+        snake->y[i] = snake->y[i-1];
+    }
+
+    // Beweeg de kop van de slang
+    switch (snake->dir) {
+        case UP: snake->y[0]--; break;
+        case DOWN: snake->y[0]++; break;
+        case LEFT: snake->x[0]--; break;
+        case RIGHT: snake->x[0]++; break;
+    }
+}
+
+int checkCollision(Snake* snake) {
+    // Controleer of de slang tegen de rand of zichzelf botst
+    if (snake->x[0] < 0 || snake->x[0] >= SCREEN_WIDTH / 8 || snake->y[0] < 0 || snake->y[0] >= SCREEN_HEIGHT / 8) {
+        return 1; // Botst tegen de rand
+    }
+    for (int i = 1; i < snake->length; i++) {
+        if (snake->x[0] == snake->x[i] && snake->y[0] == snake->y[i]) {
+            return 1; // Botst tegen zichzelf
+        }
+    }
+    return 0; // Geen botsing
+}
+
+void placeFruit(Fruit* fruit) {
+    fruit->x = rand() % (SCREEN_WIDTH / 8);
+    fruit->y = rand() % (SCREEN_HEIGHT / 8);
+}
+
+void updateSettings() {
+    printf("Instellingen geüpdatet: snelheid = %d, score = %d\n", speed, score);
+}
